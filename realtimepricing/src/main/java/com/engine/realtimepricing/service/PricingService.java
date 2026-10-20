@@ -70,7 +70,6 @@ public class PricingService {
             return sd;
         });
 
-        // 24 hours window cutoff (86400 seconds)
         long cutoff = now - 86400;
         List<PriceRecord> recentRecords = new ArrayList<>();
         double high = currentPrice;
