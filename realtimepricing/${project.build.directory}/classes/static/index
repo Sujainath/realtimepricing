@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Market Prices</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f7f9fa; }
+        h2 { color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
+        th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+        th { background-color: #2c3e50; color: white; }
+        .green { color: green; font-weight: bold; }
+        .red { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h2>Live Market Pricing Engine</h2>
+    <p id="status">Connecting to server...</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Symbol</th>
+                <th>Buy</th>
+                <th>Sell</th>
+                <th>24h High (Self-Computed)</th>
+                <th>24h Low (Self-Computed)</th>
+                <th>24h Change %</th>
+            </tr>
+        </thead>
+        <tbody id="market-data"></tbody>
+    </table>
+
+    <script>
+        const tableBody = document.getElementById("market-data");
+        const statusText = document.getElementById("status");
+
+        const socket = new WebSocket("ws://" + window.location.host + "/ws/market");
+
+        socket.onopen = function() {
+            statusText.innerText = "Status: Live Connected";
+            statusText.style.color = "green";
+        };
+
+        socket.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            let row = document.getElementById(data.s);
+
+            if (!row) {
+                row = document.createElement("tr");
+                row.id = data.s;
+                row.innerHTML = `
+                    <td><b>${data.s}</b></td>
+                    <td id="${data.s}-b"></td>
+                    <td id="${data.s}-a"></td>
+                    <td id="${data.s}-h"></td>
+                    <td id="${data.s}-l"></td>
+                    <td id="${data.s}-c"></td>
+                `;
+                tableBody.appendChild(row);
+            }
+
+            document.getElementById(data.s + "-b").innerText = data.b;
+            document.getElementById(data.s + "-a").innerText = data.a;
+            document.getElementById(data.s + "-h").innerText = data.h;
+            document.getElementById(data.s + "-l").innerText = data.l;
+
+            const changeCol = document.getElementById(data.s + "-c");
+            changeCol.innerText = data.c + "%";
+            changeCol.className = data.c >= 0 ? "green" : "red";
+        };
+
+        socket.onclose = function() {
+            statusText.innerText = "Status: Disconnected";
+            statusText.style.color = "red";
+        };
+    </script>
+</body>
+</html>
