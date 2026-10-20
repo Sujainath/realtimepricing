@@ -29,7 +29,6 @@ public class FeedListener {
     private final FrontendSocketHandler socketHandler;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    // Document-ல் உள்ள அதே அத்தனை Symbols[cite: 10]
     private final List<String> symbols = Arrays.asList(
             "AUDUSD", "AUDCAD", "AUDCHF", "AUDJPY", "AUDNZD",
             "AUDSGD", "CADCHF", "CADJPY", "CHFJPY", "CHFSGD",
@@ -68,7 +67,7 @@ public class FeedListener {
                     @Override
                     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
                         System.out.println("Connected to feed. Authenticating...");
-                        // Step 1: Send only Auth message and WAIT[cite: 9, 10]
+                        
                         String authJson = "{\"action\":\"auth\",\"api_key\":\"" + API_KEY.trim() + "\",\"secret\":\"" + SECRET_KEY.trim() + "\"}";
                         System.out.println("Sent Auth: " + authJson);
                         session.sendMessage(new TextMessage(authJson));
@@ -81,9 +80,9 @@ public class FeedListener {
 
                         JsonNode node = mapper.readTree(payload);
 
-                        // Step 2 & 3: Check for successful auth before subscribing[cite: 10]
+                      
                         if (!subscribed) {
-                            // Any success acknowledgment from server
+                          
                             if ((node.has("status") && "success".equalsIgnoreCase(node.get("status").asText()))
                                     || (node.has("event") && "authenticated".equalsIgnoreCase(node.get("event").asText()))
                                     || (node.has("message") && node.get("message").asText().toLowerCase().contains("success"))
@@ -97,7 +96,6 @@ public class FeedListener {
                             }
                         }
 
-                        // Step 4 & 5: Ingest Price updates and process[cite: 9, 10]
                         if (node.has("symbol") && node.has("buy") && node.has("sell")) {
                             String symbol = node.get("symbol").asText();
                             double buy = node.get("buy").asDouble();
