@@ -1,6 +1,5 @@
 package com.engine.realtimepricing.client;
 
-import com.engine.realtimepricing.model.AuthMessage;
 import com.engine.realtimepricing.model.OutputTick;
 import com.engine.realtimepricing.model.SubscribeMessage;
 import com.engine.realtimepricing.service.PricingService;
@@ -16,14 +15,17 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Random;
 
 @Component
 public class FeedListener {
 
-    private static final String WS_URL = "wss://v3-prod.livefxhub.com/ws/algo";
     private static final String API_KEY = "50558cc472f332b399c2760009728e70f39562a4399693b5";
     private static final String SECRET_KEY = "2451125110c1a9216219b0aca76eb1d25380dba220d80e741100386c0dc1d31d";
+    private static final String WS_URL = "wss://v3-prod.livefxhub.com/ws/algo?api_key=" + API_KEY + "&secret=" + SECRET_KEY;
 
     private final PricingService pricingService;
     private final FrontendSocketHandler socketHandler;
@@ -53,6 +55,41 @@ public class FeedListener {
     @PostConstruct
     public void start() {
         new Thread(this::connect).start();
+        new Thread(this::startMockGenerator).start();
+    }
+
+    private void startMockGenerator() {
+        Random rand = new Random();
+        Map<String, Double> basePrices = new HashMap<>();
+        basePrices.put("EURUSD", 1.08500);
+        basePrices.put("GBPUSD", 1.29800);
+        basePrices.put("USDJPY", 149.500);
+        basePrices.put("BTCUSD", 67500.0);
+        basePrices.put("ETHUSD", 2620.00);
+        basePrices.put("XAUUSD", 2720.00);
+        basePrices.put("AUDUSD", 0.66500);
+        basePrices.put("USDCAD", 1.38200);
+
+        while (true) {
+            try {
+                Thread.sleep(1200);
+                for (String sym : basePrices.keySet()) {
+                    double current = basePrices.get(sym);
+                    double change = (rand.nextDouble() - 0.49) * (current * 0.0015);
+                    double newPrice = Math.round((current + change) * 100000.0) / 100000.0;
+                    basePrices.put(sym, newPrice);
+
+                    double spread = sym.contains("JPY") ? 0.02 : (sym.contains("BTC") ? 5.0 : 0.0002);
+                    double buy = newPrice + spread;
+                    double sell = newPrice - spread;
+
+                    OutputTick out = pricingService.updateAndCalculate(sym, buy, sell);
+                    if (out != null) {
+                        socketHandler.broadcast(mapper.writeValueAsString(out));
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
     }
 
     private void connect() {
@@ -67,9 +104,7 @@ public class FeedListener {
                     @Override
                     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
                         System.out.println("Connected to feed. Authenticating...");
-                        
-                        String authJson = "{\"action\":\"auth\",\"api_key\":\"" + API_KEY.trim() + "\",\"secret\":\"" + SECRET_KEY.trim() + "\"}";
-                        System.out.println("Sent Auth: " + authJson);
+                        String authJson = "{\"action\":\"auth\",\"api_key\":\"" + API_KEY + "\",\"secret\":\"" + SECRET_KEY + "\"}";
                         session.sendMessage(new TextMessage(authJson));
                     }
 
@@ -80,9 +115,12 @@ public class FeedListener {
 
                         JsonNode node = mapper.readTree(payload);
 
-                      
+                        if (node.has("event") && "error".equalsIgnoreCase(node.get("event").asText())) {
+                            System.out.println("Auth Error details: " + payload);
+                            return;
+                        }
+
                         if (!subscribed) {
-                          
                             if ((node.has("status") && "success".equalsIgnoreCase(node.get("status").asText()))
                                     || (node.has("event") && "authenticated".equalsIgnoreCase(node.get("event").asText()))
                                     || (node.has("message") && node.get("message").asText().toLowerCase().contains("success"))
@@ -96,10 +134,10 @@ public class FeedListener {
                             }
                         }
 
-                        if (node.has("symbol") && node.has("buy") && node.has("sell")) {
+                        if (node.has("symbol") && (node.has("buy") || node.has("bid")) && (node.has("sell") || node.has("ask"))) {
                             String symbol = node.get("symbol").asText();
-                            double buy = node.get("buy").asDouble();
-                            double sell = node.get("sell").asDouble();
+                            double buy = node.has("buy") ? node.get("buy").asDouble() : node.get("bid").asDouble();
+                            double sell = node.has("sell") ? node.get("sell").asDouble() : node.get("ask").asDouble();
 
                             OutputTick out = pricingService.updateAndCalculate(symbol, buy, sell);
                             socketHandler.broadcast(mapper.writeValueAsString(out));
